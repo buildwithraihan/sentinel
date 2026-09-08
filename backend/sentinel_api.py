@@ -3,11 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import io
+import os
 
 app = FastAPI(title="SENTINEL API")
 
-# Allow your React frontend to call this from any origin (fine for hackathon demo)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = YOLO('runs/detect/SENTINEL_runs/sctd_v1/weights/best.pt')
+# Path relative to this file's location, works both locally and on Render
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "best.pt")
+model = YOLO(MODEL_PATH)
 
 HIGH_CONF = 0.7
 MEDIUM_CONF = 0.45
@@ -54,42 +55,4 @@ def preprocess_image(img_bytes):
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     denoised = cv2.medianBlur(gray, 3)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(denoised)
-    normalized = cv2.normalize(enhanced, None, 0, 255, cv2.NORM_MINMAX)
-    return cv2.cvtColor(normalized, cv2.COLOR_GRAY2BGR)
-
-
-@app.get("/")
-def root():
-    return {"status": "SENTINEL API running"}
-
-
-@app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
-    img_bytes = await file.read()
-    processed_img = preprocess_image(img_bytes)
-
-    results = model.predict(source=processed_img, conf=0.25, iou=0.4, save=False, verbose=False)
-
-    detections = []
-    for r in results:
-        for box in r.boxes:
-            cls_id = int(box.cls[0])
-            cls_name = model.names[cls_id]
-            conf = float(box.conf[0])
-            xyxy = box.xyxy[0].tolist()
-            detections.append({
-                "class": cls_name,
-                "confidence": round(conf, 4),
-                "bbox": {"x1": xyxy[0], "y1": xyxy[1], "x2": xyxy[2], "y2": xyxy[3]}
-            })
-
-    classified = classify_natural_vs_artificial(detections)
-    final = assign_priority(classified)
-
-    return {
-        "filename": file.filename,
-        "total_detections": len(final),
-        "detections": final
-    }
+    clahe =
